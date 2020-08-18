@@ -17,6 +17,7 @@
 
 #ifndef _HOTSTUFF_CORE_H
 #define _HOTSTUFF_CORE_H
+#define NO_SIG
 
 #include <queue>
 #include <unordered_map>
@@ -161,6 +162,7 @@ class HotStuffBase: public HotStuffCore {
     using cmd_queue_t = salticidae::MPSCQueueEventDriven<std::pair<uint256_t, commit_cb_t>>;
     cmd_queue_t cmd_pending;
     std::queue<uint256_t> cmd_pending_buffer;
+    bool first_proposal = true;
 
     /* statistics */
     uint64_t fetched;
@@ -286,7 +288,11 @@ class HotStuff: public HotStuffBase {
             const Net::Config &netconfig = Net::Config()):
         HotStuffBase(blk_size,
                     rid,
+#ifdef NO_SIG
+                    new PrivKeyType(),
+#else
                     new PrivKeyType(raw_privkey),
+#endif
                     listen_addr,
                     std::move(pmaker),
                     ec,
@@ -299,7 +305,11 @@ class HotStuff: public HotStuffBase {
             reps.push_back(
                 std::make_tuple(
                     std::get<0>(r),
+#ifdef NO_SIG
+                    new PubKeyType(),
+#else                    
                     new PubKeyType(std::get<1>(r)),
+#endif
                     uint256_t(std::get<2>(r))
                 ));
         HotStuffBase::start(std::move(reps), ec_loop);

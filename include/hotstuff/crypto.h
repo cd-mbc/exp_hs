@@ -87,7 +87,7 @@ class PartCertDummy: public PartCert {
     uint256_t obj_hash;
     public:
     PartCertDummy() {}
-    PartCertDummy(const uint256_t &obj_hash):
+    PartCertDummy(const PrivKeyDummy &priv_key, const uint256_t &obj_hash):
         obj_hash(obj_hash) {}
 
     void serialize(DataStream &s) const override {
@@ -100,7 +100,7 @@ class PartCertDummy: public PartCert {
     }
 
     PartCert *clone() override {
-        return new PartCertDummy(obj_hash);
+        return new PartCertDummy(*this);
     }
 
     bool verify(const PubKey &) override { return true; }

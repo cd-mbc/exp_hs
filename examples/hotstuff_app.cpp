@@ -63,7 +63,11 @@ using hotstuff::MsgRespCmd;
 using hotstuff::get_hash;
 using hotstuff::promise_t;
 
-using HotStuff = hotstuff::HotStuffSecp256k1;
+#ifndef NO_SIG
+    using HotStuff = hotstuff::HotStuffSecp256k1;
+#else
+    using HotStuff = hotstuff::HotStuffNoSig;
+#endif
 
 class HotStuffApp: public HotStuff {
     double stat_period;

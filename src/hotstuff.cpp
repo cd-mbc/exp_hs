@@ -333,7 +333,7 @@ HotStuffBase::HotStuffBase(uint32_t blk_size,
                     EventContext ec,
                     size_t nworker,
                     const Net::Config &netconfig):
-        HotStuffCore(rid, std::move(priv_key)),
+        HotStuffCore(rid, std::move(priv_key), blk_size),
         listen_addr(listen_addr),
         blk_size(blk_size),
         ec(ec),
@@ -379,7 +379,8 @@ void HotStuffBase::do_vote(ReplicaID last_proposer, const Vote &vote) {
             //on_receive_vote(vote);
         }
         else
-            pn.send_msg(MsgVote(vote), get_config().get_peer_id(proposer));
+            // pn.send_msg(MsgVote(vote), get_config().get_peer_id(proposer));
+            pn.multicast_msg(MsgVote(vote), peers);
     });
 }
 
@@ -395,6 +396,7 @@ void HotStuffBase::do_decide(Finality &&fin) {
     {
         it->second(std::move(fin));
         decision_waiting.erase(it);
+        decided_cmds.insert(std::make_pair(fin.cmd_hash, true));        
     }
 }
 
@@ -430,33 +432,41 @@ void HotStuffBase::start(
 
     cmd_pending.reg_handler(ec, [this](cmd_queue_t &q) {
         std::pair<uint256_t, commit_cb_t> e;
+        std::vector<uint256_t> cmds;
+        ReplicaID proposer =  pmaker->get_proposer();
+
         while (q.try_dequeue(e))
         {
-            ReplicaID proposer = pmaker->get_proposer();
 
             const auto &cmd_hash = e.first;
             auto it = decision_waiting.find(cmd_hash);
-            if (it == decision_waiting.end())
+            if (it == decision_waiting.end()) {
                 it = decision_waiting.insert(std::make_pair(cmd_hash, e.second)).first;
-            else
+                cmd_pool.push(cmd_hash);
+            } else {
                 e.second(Finality(id, 0, 0, 0, cmd_hash, uint256_t()));
+            }
             if (proposer != get_id()) continue;
-            cmd_pending_buffer.push(cmd_hash);
-            if (cmd_pending_buffer.size() >= blk_size)
+            if (!pmaker->is_first_propose) continue;
+            cmd_pending_buffer.push(cmd_hash);           
+            
+            if (first_proposal && cmd_pending_buffer.size() >= blk_size)
             {
-                std::vector<uint256_t> cmds;
                 for (uint32_t i = 0; i < blk_size; i++)
                 {
                     cmds.push_back(cmd_pending_buffer.front());
                     cmd_pending_buffer.pop();
                 }
                 pmaker->beat().then([this, cmds = std::move(cmds)](ReplicaID proposer) {
-                    if (proposer == get_id())
+                    if (proposer == get_id()) {
+                        pmaker->is_first_propose = false;
                         on_propose(cmds, pmaker->get_parents());
+                    }
                 });
+                first_proposal = false;
                 return true;
             }
-        }
+        }      
         return false;
     });
 }
